@@ -7,33 +7,24 @@
 /*global Tracker:false */
 /*global Random:false */
 
-var Players = Meteor.neo4j.collection('players');
+var search = new ReactiveVar(false);
 
-function buildRegExp(searchText) {
-  // this is a dump implementation
-  if (searchText) {
-    var words = searchText.trim().split(/[ \-\:]+/);
-    var exps = _.map(words, function(word) {
-      return "(?=.*" + word + ")";
-    });
-    var fullExp = '(?i)' + exps.join('') + ".+"
-    return fullExp;
-  } else {
-    return '.*';
-  }
-}
+var Players = Meteor.neo4j.collection('players');
 
 if (Meteor.isClient) {
 
   Tracker.autorun(function() {
-    var search = buildRegExp(Session.get('searchtext'));
-    Players.subscribe('allPlayers', {searchtext: search}, 'node');
+    Players.subscribe('allPlayers', {}, 'node');
   });
 
   Template.leaderboard.helpers({
     players: function() {
       return Players.find({
-        'metadata.labels': 'Player'
+        'metadata.labels': 'Player',
+        name:{
+          '$regex': new RegExp(search.get()),
+          '$options': 'i'
+        }
       }, {
         sort: {
           score: -1
@@ -67,9 +58,9 @@ if (Meteor.isClient) {
       //    if (evt.which === 13) {
       if (evt.keyCode == 13) {
         console.log("return!");
-        var searchtext = tmpl.find('#searchtext').value;
-        Session.set("searchtext", searchtext);
-        console.log("New Search: " + searchtext);
+        var searchtext = evt.currentTarget.value;
+        search.set(searchtext);
+        console.log("New Search: " + search.get());
       }
     }
   });
@@ -119,7 +110,7 @@ if (Meteor.isServer) {
 
 
   Players.publish('allPlayers', function() {
-    return 'MATCH (node:Player) WHERE node.name =~ {searchtext} RETURN node ORDER BY node.score DESC';
+    return 'MATCH (node:Player) RETURN node ORDER BY node.score DESC';
   }, function() {
     /* onSubscribe callback */
     if (Players.find({}).count() <= 0) {
